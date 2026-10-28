@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 import 'geek/geek_editing_engine.dart';
 import 'geek/geek_keyboard_panel.dart';
 
+import 'holo/console_server.dart';
+import 'holo/holo_link.dart';
+
 enum KeyboardMode { hidden, docked, floating }
 
 class ConsolePage extends StatefulWidget {
@@ -36,9 +39,31 @@ class _ConsolePageState extends State<ConsolePage> {
   @override
   void initState() {
     super.initState();
+    // 监听输入框文字变化，实时同步给大屏
+    _controller.addListener(() {
+      ConsoleServer.instance.pushKeystroke(_controller.text);
+    });
     _controller.selection =
         TextSelection.collapsed(offset: _controller.text.length);
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
+    // --- 加入全息大屏联动回调 ---
+    ConsoleServer.instance.onAction = (a) {
+      if (a.action == 'preset.run') {
+        // 这里假设你原本执行命令的函数叫 _runCommand
+        // 如果叫别的名字，请换成你自己的
+       // _runCommand(a.cmd);
+      }
+    };
+
+    ConsoleServer.instance.onRemoteCommand = (cmd) {
+     // _runCommand(cmd);
+    };
+
+    ConsoleServer.instance.onRemoteInput = (text) {
+      // 把大屏发来的文字，同步显示在你的输入框里
+      _controller.text = text;
+      _controller.selection = TextSelection.collapsed(offset: text.length);
+    };
   }
 
   @override
@@ -46,6 +71,8 @@ class _ConsolePageState extends State<ConsolePage> {
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     _focusNode.dispose();
     _controller.dispose();
+    // 关闭并清理大屏服务
+    ConsoleServer.instance.stop();
     super.dispose();
   }
 
@@ -179,8 +206,10 @@ class _ConsolePageState extends State<ConsolePage> {
       body: SafeArea(
         child: Stack(
           children: <Widget>[
+            const HoloLinkBar(),
             Column(
               children: <Widget>[
+                const HoloLinkBar(),
                 Expanded(child: _buildEditor()),
                 if (_mode == KeyboardMode.docked)
                   SizedBox(
