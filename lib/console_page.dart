@@ -206,7 +206,6 @@ class _ConsolePageState extends State<ConsolePage> {
       body: SafeArea(
         child: Stack(
           children: <Widget>[
-            const HoloLinkBar(),
             Column(
               children: <Widget>[
                 const HoloLinkBar(),
