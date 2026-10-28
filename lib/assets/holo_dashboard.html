@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#000000" />
+<title>HOLO COMMAND // 全息指挥中心</title>
+<style>
+:root{
+  --green:#00ff9c;
+  --cyan:#2ee6ff;
+  --pink:#ff2d95;
+  --text:#c8fff0;
+  --dim:#5b7a71;
+  --line:rgba(0,255,156,.16);
+  --panel:rgba(3,10,8,.78);
+  --mono:"JetBrains Mono","Cascadia Mono","SFMono-Regular",Consolas,"Courier New",monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:#000;color:var(--text);font-family:var(--mono);overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+  background-image:
+    radial-gradient(1100px 520px at 12% -12%,rgba(0,255,156,.10),transparent 60%),
+    radial-gradient(900px 480px at 92% -8%,rgba(46,230,255,.09),transparent 55%),
+    radial-gradient(700px 500px at 50% 120%,rgba(255,45,149,.06),transparent 60%);
+}
+body::before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(0,255,156,.055) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,255,156,.055) 1px,transparent 1px);
+  background-size:48px 48px;
+  mask-image:radial-gradient(circle at 50% 35%,#000 25%,transparent 82%);
+  -webkit-mask-image:radial-gradient(circle at 50% 35%,#000 25%,transparent 82%);
+}
+body::after{
+  content:"";position:fixed;inset:0;z-index:50;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px);
+  opacity:.5;
+}
+#glare{
+  position:fixed;left:0;right:0;height:38vh;z-index:49;pointer-events:none;
+  background:linear-gradient(to bottom,transparent,rgba(0,255,156,.05),transparent);
+  animation:glare 9s linear infinite;
+}
+@keyframes glare{0%{top:-40vh}100%{top:110vh}}
+
+#app{
+  position:relative;z-index:2;height:100%;display:flex;flex-direction:column;
+  padding:14px 16px;gap:12px;
+}
+
+/* ---------- header ---------- */
+.hud{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.logo{
+  width:38px;height:38px;display:grid;place-items:center;font-size:17px;color:var(--green);
+  border:1px solid rgba(0,255,156,.45);border-radius:10px;
+  box-shadow:0 0 22px rgba(0,255,156,.28) inset,0 0 18px rgba(0,255,156,.12);
+  animation:breathe 3.2s ease-in-out infinite;
+}
+@keyframes breathe{50%{box-shadow:0 0 28px rgba(0,255,156,.5) inset,0 0 26px rgba(0,255,156,.25)}}
+.title{font-size:17px;font-weight:700;letter-spacing:5px;color:#eafff8;line-height:1.1}
+.title em{font-style:normal;color:var(--green);text-shadow:0 0 16px rgba(0,255,156,.7)}
+.sub{font-size:10px;letter-spacing:2px;color:var(--dim);margin-top:3px}
+.hud-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{
+  display:flex;align-items:center;gap:7px;padding:7px 11px;font-size:11px;letter-spacing:1px;
+  border:1px solid var(--line);background:rgba(0,255,156,.04);color:var(--dim);
+  border-radius:8px;white-space:nowrap;
+}
+.pill b{color:var(--green);font-weight:700}
+.pill.clock b{font-size:13px;letter-spacing:2px}
+.dot{
+  width:7px;height:7px;border-radius:50%;background:#ff3b5c;display:inline-block;
+  box-shadow:0 0 10px #ff3b5c,0 0 26px rgba(255,59,92,.5);
+  transition:.2s;
+}
+.pill.on .dot{background:var(--green);box-shadow:0 0 10px var(--green),0 0 26px rgba(0,255,156,.6);animation:blink 1.6s ease-in-out infinite}
+@keyframes blink{50%{opacity:.35}}
+.pill.on{color:#d6fff3;border-color:rgba(0,255,156,.4)}
+.ghost{
+  font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--dim);
+  background:transparent;border:1px solid var(--line);padding:7px 11px;border-radius:8px;
+  cursor:pointer;transition:.15s;
+}
+.ghost:hover{color:var(--green);border-color:rgba(0,255,156,.5);box-shadow:0 0 14px rgba(0,255,156,.15)}
+
+/* ---------- layout ---------- */
+.grid{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.65fr) minmax(330px,.9fr);gap:12px}
+.side{display:flex;flex-direction:column;gap:12px;min-height:0}
+
+.panel{
+  position:relative;background:var(--panel);border:1px solid var(--line);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);min-height:0;
+  box-shadow:0 0 0 1px rgba(0,0,0,.6),0 18px 50px rgba(0,0,0,.55);
+}
+.panel::before,.panel::after{
+  content:"";position:absolute;width:13px;height:13px;border:2px solid var(--green);opacity:.75;pointer-events:none;
+}
+.panel::before{top:-1px;left:-1px;border-right:0;border-bottom:0}
+.panel::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
+
+.panel-head{
+  display:flex;align-items:center;gap:10px;padding:9px 12px;
+  border-bottom:1px solid var(--line);font-size:10px;letter-spacing:2px;color:var(--dim);
+  background:linear-gradient(90deg,rgba(0,255,156,.06),transparent 70%);
+}
+.panel-head .h{color:var(--green);font-weight:700}
+.panel-head .meta{display:flex;align-items:center;gap:6px}
+.panel-head .spacer{flex:1}
+.dot.mini{width:5px;height:5px;background:var(--green);box-shadow:0 0 8px var(--green);animation:blink 1.4s ease-in-out infinite}
+
+/* ---------- terminal ---------- */
+.term{display:flex;flex-direction:column;min-height:0}
+.term-body{
+  flex:1;overflow:auto;padding:12px 14px;font-size:13px;line-height:1.6;
+  scrollbar-width:thin;scrollbar-color:rgba(0,255,156,.35) transparent;
+}
+.term-body::-webkit-scrollbar{width:8px}
+.term-body::-webkit-scrollbar-thumb{background:rgba(0,255,156,.25);border-radius:8px}
+.term-body::-webkit-scrollbar-track{background:transparent}
+.line{display:flex;gap:10px;padding:1px 0;animation:lineIn .18s ease-out;word-break:break-word}
+@keyframes lineIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+.line .ts{flex:0 0 auto;color:#2f4a43;font-size:11px;padding-top:2px}
+.line .tag{flex:0 0 auto;font-size:10px;letter-spacing:1px;padding:2px 5px;height:16px;border:1px solid currentColor;border-radius:3px;opacity:.85;line-height:10px}
+.line .msg{flex:1;min-width:0;color:#b8e8da;white-space:pre-wrap}
+.line.ok .tag{color:var(--green)}
+.line.ok .msg{color:#d8fff4}
+.line.warn .tag{color:#ffc857}
+.line.warn .msg{color:#ffe0a0}
+.line.error .tag{color:#ff3b5c}
+.line.error .msg{color:#ff8ea0}
+.line.tablet .tag{color:var(--pink)}
+.line.tablet .msg{color:#ffd3e9}
+.line.phone .tag{color:var(--cyan)}
+.line.phone .msg{color:#c9f6ff}
+.line.sys .tag{color:#6f8a83}
+.line.sys .msg{color:#8fb3a9}
+.line.cmd .tag{color:var(--cyan)}
+.line.cmd .msg{color:#eafffb}
+
+.term-foot{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--line);
+  background:rgba(0,255,156,.03);
+}
+.term-foot .prompt{color:var(--green);font-size:12px;white-space:nowrap;text-shadow:0 0 12px rgba(0,255,156,.5)}
+#cmdInput{
+  flex:1;min-width:0;background:transparent;border:0;outline:0;color:#e9fff9;
+  font-family:var(--mono);font-size:14px;letter-spacing:.5px;padding:6px 2px;
+  caret-color:var(--green);
+}
+#cmdInput::placeholder{color:#3c564f}
+#cmdInput.mirror{color:var(--cyan);text-shadow:0 0 12px rgba(46,230,255,.4)}
+.send{
+  font-family:var(--mono);font-size:11px;letter-spacing:2px;font-weight:700;cursor:pointer;
+  color:#001a10;background:var(--green);border:0;padding:9px 16px;border-radius:6px;
+  transition:.15s;box-shadow:0 0 18px rgba(0,255,156,.35);
+}
+.send:hover{box-shadow:0 0 26px rgba(0,255,156,.6);transform:translateY(-1px)}
+.send:active{transform:translateY(0)}
+.send:disabled{background:#123528;color:#4d7a6b;box-shadow:none;cursor:not-allowed}
+
+/* ---------- vitals ---------- */
+.vitals{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px}
+.vital{
+  background:linear-gradient(180deg,rgba(0,255,156,.055),rgba(0,255,156,.015));
+  border:1px solid rgba(0,255,156,.13);padding:9px 10px 6px;
+}
+.vital .k{font-size:9px;letter-spacing:2.5px;color:var(--dim)}
+.vital .v{
+  font-size:26px;font-weight:700;line-height:1.15;color:var(--green);
+  text-shadow:0 0 20px rgba(0,255,156,.55);font-variant-numeric:tabular-nums;
+}
+.vital .v small{font-size:10px;color:var(--dim);font-weight:400;margin-left:2px;text-shadow:none}
+.vital canvas{display:block;width:100%;height:52px;margin-top:4px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 12px 12px}
+.tile{
+  border:1px solid rgba(46,230,255,.14);background:rgba(46,230,255,.035);
+  padding:8px 9px;display:flex;flex-direction:column;gap:2px;
+}
+.tile span{font-size:9px;letter-spacing:2px;color:var(--dim)}
+.tile b{font-size:16px;color:var(--cyan);text-shadow:0 0 16px rgba(46,230,255,.45);font-variant-numeric:tabular-nums}
+.tile i{font-style:normal;font-size:9px;color:#3f645e}
+
+/* ---------- presets ---------- */
+.presets{flex:1;display:flex;flex-direction:column;min-height:0}
+.preset-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;overflow:auto;align-content:start;
+  scrollbar-width:thin;scrollbar-color:rgba(0,255,156,.3) transparent;
+}
+.preset{
+  position:relative;text-align:left;cursor:pointer;overflow:hidden;
+  font-family:var(--mono);color:var(--text);
+  background:linear-gradient(180deg,rgba(0,255,156,.07),rgba(0,0,0,.25));
+  border:1px solid rgba(0,255,156,.16);padding:9px 10px;border-radius:4px;
+  display:flex;flex-direction:column;gap:3px;min-width:0;
+  transition:border-color .15s,box-shadow .15s,transform .1s;
+}
+.preset::after{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:.2s;
+  background:radial-gradient(circle at 50% 0%,rgba(0,255,156,.22),transparent 70%);
+}
+.preset:hover{border-color:rgba(0,255,156,.65);box-shadow:0 0 20px rgba(0,255,156,.18)}
+.preset:hover::after{opacity:1}
+.preset:active{transform:translateY(1px)}
+.preset .pi{font-size:14px;color:var(--green);line-height:1}
+.preset .pn{font-size:12px;color:#e2fff7;letter-spacing:1px}
+.preset .pc{font-size:9px;color:#4c6f66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.preset.flash{border-color:var(--green);box-shadow:0 0 26px rgba(0,255,156,.45)}
+
+/* ---------- footer tape ---------- */
+.tape{
+  display:flex;align-items:center;gap:12px;padding:7px 12px;font-size:10px;letter-spacing:1.5px;
+  color:#4e6f66;border:1px solid rgba(0,255,156,.10);background:rgba(0,255,156,.025);
+  white-space:nowrap;overflow:hidden;
+}
+.tape #ticker{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:#78a79a}
+.tape .tape-end{flex:0 0 auto;color:var(--cyan);max-width:45%;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- gate ---------- */
+.gate{
+  position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.86);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+}
+.gate.show{display:flex}
+.gate-card{width:min(420px,92vw);padding:22px}
+.gate-card .g-title{color:var(--pink);font-size:15px;letter-spacing:4px;margin-bottom:10px;text-shadow:0 0 18px rgba(255,45,149,.5)}
+.gate-card p{font-size:11px;line-height:1.7;color:var(--dim);margin:0 0 14px}
+.gate-card input{
+  width:100%;background:rgba(0,0,0,.6);border:1px solid rgba(0,255,156,.25);color:var(--text);
+  font-family:var(--mono);font-size:12px;padding:10px;border-radius:5px;outline:0;margin-bottom:12px;
+}
+.gate-card input:focus{border-color:var(--green);box-shadow:0 0 16px rgba(0,255,156,.2)}
+.gate-card .send{width:100%;padding:11px}
+
+@media (max-width: 980px){
+  .grid{grid-template-columns:1fr;grid-template-rows:1.35fr .95fr}
+  .side{flex-direction:column}
+  .title{letter-spacing:3px;font-size:15px}
+  .pill.clock{display:none}
+}
+@media (max-width: 620px){
+  #app{padding:10px;gap:9px}
+  .preset-grid{grid-template-columns:1fr 1fr}
+  .vitals{grid-template-columns:1fr 1fr}
+  .tiles{grid-template-columns:repeat(3,1fr)}
+}
+</style>
+</head>
+<body>
+<div id="glare"></div>
+
+<div id="app">
+  <header class="hud">
+    <div class="brand">
+      <div class="logo">◉</div>
+      <div>
+        <div class="title">HOLO <em>COMMAND</em></div>
+        <div class="sub">全息赛博指挥中心 · NODE-01 · 平板主脑</div>
+      </div>
+    </div>
+    <div class="hud-right">
+      <div class="pill" id="pillLink"><i class="dot"></i><span id="linkText">链路断开</span></div>
+      <div class="pill"><span>LAT</span><b id="latency">--</b><span>ms</span></div>
+      <div class="pill"><b id="clients">0</b><span>LINK</span></div>
+      <div class="pill clock"><b id="clock">--:--:--</b></div>
+      <button class="ghost" id="btnFull">全屏</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="panel term">
+      <div class="panel-head">
+        <span class="h">/dev/console</span>
+        <span class="meta"><i class="dot mini"></i>LIVE STREAM</span>
+        <span class="spacer"></span>
+        <button class="ghost" id="btnPause">自动滚动 ON</button>
+        <button class="ghost" id="btnClear">清屏</button>
+      </div>
+      <div class="term-body" id="term"></div>
+      <div class="term-foot">
+        <span class="prompt">tablet@holo:~$</span>
+        <input id="cmdInput" autocomplete="off" autocapitalize="off" spellcheck="false"
+               placeholder="输入指令，回车下发到手机端执行…" />
+        <button class="send" id="btnSend">SEND ⏎</button>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <div class="panel-head">
+          <span class="h">SYSTEM VITALS</span>
+          <span class="spacer"></span>
+          <span class="meta" id="uptime">UP 00:00:00</span>
+        </div>
+        <div class="vitals">
+          <div class="vital">
+            <div class="k">CPU LOAD</div>
+            <div class="v" id="cpuVal">--<small>%</small></div>
+            <canvas id="cpuChart"></canvas>
+          </div>
+          <div class="vital">
+            <div class="k">MEMORY</div>
+            <div class="v" id="memVal">--<small>%</small></div>
+            <canvas id="memChart"></canvas>
+          </div>
+        </div>
+        <div class="tiles">
+          <div class="tile"><span>NET</span><b id="netVal">0.0</b><i>MB/s</i></div>
+          <div class="tile"><span>LATENCY</span><b id="latVal">--</b><i>ms</i></div>
+          <div class="tile"><span>LINKS</span><b id="linkVal">0</b><i>device</i></div>
+        </div>
+      </section>
+
+      <section class="panel presets">
+        <div class="panel-head">
+          <span class="h">QUICK OPS</span>
+          <span class="spacer"></span>
+          <span class="meta">点击即下发执行</span>
+        </div>
+        <div class="preset-grid" id="presetGrid"></div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="tape">
+    <span id="ticker">正在建立与手机端的主脑链路…</span>
+    <span class="tape-end" id="mirror">MIRROR: —</span>
+  </footer>
+</div>
+
+<div class="gate" id="gate">
+  <div class="gate-card panel">
+    <div class="g-title">LINK LOST</div>
+    <p>未能自动连接。请输入手机端控制台显示的 WebSocket 地址（例如 ws://192.168.1.20:8848/ws）。</p>
+    <input id="manualUrl" value="ws://192.168.1.100:8848/ws" spellcheck="false" autocomplete="off" />
+    <button class="send" id="btnConnect">建立连接</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (s) { return document.querySelector(s); };
+
+  /* ---------------- 预设（服务端下发后可覆盖） ---------------- */
+  var FALLBACK_PRESETS = [
+    { id: 'disk',   icon: '▤', name: '磁盘巡检', cmd: 'df -h && du -sh /var/log' },
+    { id: 'docker', icon: '▣', name: '容器总览', cmd: 'docker ps --format "table {{.Names}} {{.Status}} {{.Ports}}"' },
+    { id: 'top',    icon: '◈', name: '资源 TOP', cmd: 'ps aux --sort=-%cpu | head -n 10' },
+    { id: 'nginx',  icon: '⟳', name: '重载 Nginx', cmd: 'nginx -t && systemctl reload nginx' },
+    { id: 'net',    icon: '⇄', name: '网络探测', cmd: 'ping -c 4 1.1.1.1' },
+    { id: 'log',    icon: '⌫', name: '清理旧日志', cmd: 'journalctl --vacuum-time=7d' }
+  ];
+
+  var state = {
+    presets: [],
+    autoscroll: true,
+    connected: false,
+    cpu: 0,
+    mem: 0,
+    net: 0,
+    synthCpu: 24,
+    synthMem: 47,
+    lastMetricsAt: 0,
+    latency: null,
+    uptime: 0
+  };
+
+  var ws = null;
+  var attempts = 0;
+  var retryTimer = null;
+  var pingTimer = null;
+
+  /* ---------------- 工具 ---------------- */
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  function nowClock() {
+    var d = new Date();
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  }
+  function hhmmss(total) {
+    var h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+    return pad2(h) + ':' + pad2(m) + ':' + pad2(s);
+  }
+
+  var TAGS = { sys: 'SYS', ok: 'OK', warn: 'WARN', error: 'ERR', tablet: 'TABLET', phone: 'PHONE', cmd: 'EXEC', info: 'LOG' };
+
+  /* ---------------- 终端 ---------------- */
+  var termEl = $('#term');
+
+  function addLine(level, text) {
+    level = level || 'info';
+    var row = document.createElement('div');
+    row.className = 'line ' + level;
+
+    var ts = document.createElement('span');
+    ts.className = 'ts';
+    ts.textContent = nowClock();
+
+    var tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = TAGS[level] || 'LOG';
+
+    var msg = document.createElement('span');
+    msg.className = 'msg';
+    msg.textContent = String(text == null ? '' : text);
+
+    row.appendChild(ts);
+    row.appendChild(tag);
+    row.appendChild(msg);
+    termEl.appendChild(row);
+
+    while (termEl.childElementCount > 400) termEl.removeChild(termEl.firstChild);
+
+    if (state.autoscroll) termEl.scrollTop = termEl.scrollHeight;
+
+    $('#ticker').textContent = '› ' + String(text || '').replace(/\s+/g, ' ').slice(0, 110);
+  }
+
+  /* ---------------- 图标 ---------------- */
+  function createChart(canvas, rgb) {
+    var ctx = canvas.getContext('2d');
+    var data = new Array(96);
+    var i;
+    for (i = 0; i < 96; i++) data[i] = 50;
+
+    var w = 0, h = 0, dpr = 1;
+
+    function resize() {
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      var rect = canvas.getBoundingClientRect();
+      w = Math.max(1, rect.width);
+      h = Math.max(1, rect.height);
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function sample(v) {
+      data.push(v);
+      data.shift();
+    }
+
+    function yOf(v) {
+      return h - 2 - (clamp(v, 0, 100) / 100) * (h - 8);
+    }
+
+    function draw() {
+      if (!w || !h || canvas.width !== Math.round(w * dpr)) resize();
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.strokeStyle = 'rgba(' + rgb + ',0.10)';
+      ctx.lineWidth = 1;
+      var k;
+      for (k = 1; k < 4; k++) {
+        var gy = h * k / 4 + 0.5;
+        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+      }
+      for (k = 1; k < 6; k++) {
+        var gx = w * k / 6 + 0.5;
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+      }
+
+      var step = w / (data.length - 1);
+      var idx;
+
+      // 面积填充
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (idx = 0; idx < data.length; idx++) ctx.lineTo(idx * step, yOf(data[idx]));
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      var grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, 'rgba(' + rgb + ',0.34)');
+      grad.addColorStop(1, 'rgba(' + rgb + ',0)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // 折线
+      ctx.beginPath();
+      for (idx = 0; idx < data.length; idx++) {
+        var x = idx * step, y = yOf(data[idx]);
+        if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = 'rgba(' + rgb + ',0.95)';
+      ctx.lineWidth = 1.4;
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = 'rgba(' + rgb + ',0.85)';
+      ctx.shadowBlur = 10;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // 头部光点
+      var hy = yOf(data[data.length - 1]);
+      ctx.beginPath();
+      ctx.arc(w - 2, hy, 2.4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(' + rgb + ',1)';
+      ctx.fill();
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    return { sample: sample, draw: draw, resize: resize };
+  }
+
+  var cpuChart = createChart($('#cpuChart'), '0,255,156');
+  var memChart = createChart($('#memChart'), '46,230,255');
+
+  var lastSampleAt = 0, dispCpu = 20, dispMem = 45, lastNumberAt = 0;
+
+  function frame(ts) {
+    var stale = (Date.now() - state.lastMetricsAt) > 2800;
+
+    if (stale) {
+      // 无实时数据时本地拟真波动
+      state.synthCpu = clamp(state.synthCpu + (Math.random() * 2 - 1) * 3.2, 10, 86);
+      state.synthMem = clamp(state.synthMem + (Math.random() * 2 - 1) * 1.3, 32, 82);
+      state.cpu = state.synthCpu;
+      state.mem = state.synthMem;
+    }
+
+    dispCpu += (state.cpu - dispCpu) * 0.075;
+    dispMem += (state.mem - dispMem) * 0.075;
+
+    if (ts - lastSampleAt > 220) {
+      lastSampleAt = ts;
+      cpuChart.sample(dispCpu);
+      memChart.sample(dispMem);
+    }
+
+    cpuChart.draw();
+    memChart.draw();
+
+    if (ts - lastNumberAt > 180) {
+      lastNumberAt = ts;
+      $('#cpuVal').innerHTML = dispCpu.toFixed(0) + '<small>%</small>';
+      $('#memVal').innerHTML = dispMem.toFixed(0) + '<small>%</small>';
+    }
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  /* ---------------- 预设渲染 ---------------- */
+  function renderPresets() {
+    var grid = $('#presetGrid');
+    grid.innerHTML = '';
+    var list = (state.presets && state.presets.length) ? state.presets : FALLBACK_PRESETS;
+
+    list.forEach(function (p) {
+      var btn = document.createElement('button');
+      btn.className = 'preset';
+      btn.type = 'button';
+
+      var pi = document.createElement('span');
+      pi.className = 'pi';
+      pi.textContent = p.icon || '▸';
+
+      var pn = document.createElement('span');
+      pn.className = 'pn';
+      pn.textContent = p.name || p.id || 'ACTION';
+
+      var pc = document.createElement('span');
+      pc.className = 'pc';
+      pc.textContent = p.cmd || '';
+
+      btn.appendChild(pi);
+      btn.appendChild(pn);
+      btn.appendChild(pc);
+
+      btn.addEventListener('click', function () {
+        runPreset(p, btn);
+      });
+
+      grid.appendChild(btn);
+    });
+  }
+
+  function runPreset(p, btn) {
+    var ok = send({
+      type: 'action',
+      action: 'preset.run',
+      payload: { id: p.id, name: p.name, cmd: p.cmd }
+    });
+    if (!ok) {
+      addLine('error', '链路未连接，指令未下发');
+      return;
+    }
+    addLine('sys', '▸ 下发预设 [' + (p.name || p.id) + '] → ' + (p.cmd || ''));
+    btn.classList.add('flash');
+    setTimeout(function () { btn.classList.remove('flash'); }, 320);
+  }
+
+  /* ---------------- 连接 ---------------- */
+  function autoUrl() {
+    if (location.protocol === 'http:' || location.protocol === 'https:') {
+      return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+    }
+    return null;
+  }
+
+  function showGate() { $('#gate').classList.add('show'); }
+  function hideGate() { $('#gate').classList.remove('show'); }
+
+  function setLinked(on) {
+    state.connected = on;
+    var pill = $('#pillLink');
+    if (on) pill.classList.add('on'); else pill.classList.remove('on');
+    $('#linkText').textContent = on ? '链路在线' : '链路断开';
+    $('#btnSend').disabled = !on;
+  }
+
+  function send(obj) {
+    if (!ws || ws.readyState !== 1) return false;
+    try { ws.send(JSON.stringify(obj)); return true; } catch (e) { return false; }
+  }
+
+  function startPing() {
+    stopPing();
+    pingTimer = setInterval(function () {
+      if (ws && ws.readyState === 1) {
+        send({ type: 'ping', ts: Date.now() });
+      }
+    }, 2500);
+  }
+  function stopPing() {
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+  }
+
+  function scheduleRetry() {
+    if (retryTimer) return;
+    var delay = Math.min(6000, 700 * Math.pow(1.7, attempts));
+    attempts++;
+    retryTimer = setTimeout(function () {
+      retryTimer = null;
+      connect();
+    }, delay);
+  }
+
+  function connect() {
+    if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
+
+    var url = autoUrl() || ($('#manualUrl').value || '').trim();
+    if (!url) { showGate(); return; }
+
+    addLine('sys', '正在连接 → ' + url);
+
+    try {
+      ws = new WebSocket(url);
+    } catch (e) {
+      addLine('error', '地址无效：' + e.message);
+      scheduleRetry();
+      return;
+    }
+
+    ws.onopen = function () {
+      attempts = 0;
+      hideGate();
+      setLinked(true);
+      addLine('ok', '主脑握手完成 · 双向通道已建立');
+      startPing();
+      send({ type: 'hello', role: 'tablet', ua: navigator.userAgent });
+    };
+
+    ws.onmessage = function (ev) {
+      var msg;
+      try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      handleMessage(msg);
+    };
+
+    ws.onerror = function () {
+      // 细节交给 onclose 处理
+    };
+
+    ws.onclose = function () {
+      stopPing();
+      setLinked(false);
+      addLine('warn', '链路中断，正在重连…');
+      $('#latency').textContent = '--';
+      $('#latVal').textContent = '--';
+      if (attempts >= 3) showGate();
+      scheduleRetry();
+    };
+  }
+
+  function handleMessage(msg) {
+    var type = msg && msg.type;
+
+    if (type === 'hello') {
+      addLine('ok', '手机端已确认身份：' + (msg.role || 'controller'));
+      return;
+    }
+
+    if (type === 'presets') {
+      state.presets = Array.isArray(msg.items) ? msg.items : [];
+      renderPresets();
+      return;
+    }
+
+    if (type === 'clients') {
+      var n = msg.count != null ? msg.count : 0;
+      $('#clients').textContent = n;
+      $('#linkVal').textContent = n;
+      return;
+    }
+
+    if (type === 'log') {
+      addLine(msg.level || 'info', msg.text || '');
+      return;
+    }
+
+    if (type === 'keystroke') {
+      onKeystroke(msg);
+      return;
+    }
+
+    if (type === 'state') {
+      addLine('sys', (msg.key || 'state') + ' = ' + JSON.stringify(msg.value));
+      return;
+    }
+
+    if (type === 'metrics') {
+      onMetrics(msg);
+      return;
+    }
+
+    if (type === 'pong') {
+      if (typeof msg.ts === 'number') {
+        var ms = Math.max(0, Date.now() - msg.ts);
+        state.latency = ms;
+        $('#latency').textContent = ms;
+        $('#latVal').textContent = ms;
+      }
+      return;
+    }
+
+    if (type === 'mirror') {
+      $('#mirror').textContent = 'MIRROR: ' + String(msg.data || '').slice(-46);
+      return;
+    }
+  }
+
+  function onMetrics(msg) {
+    if (typeof msg.cpu === 'number') state.cpu = msg.cpu;
+    if (typeof msg.mem === 'number') state.mem = msg.mem;
+    if (typeof msg.net === 'number') {
+      state.net = msg.net;
+      $('#netVal').textContent = msg.net.toFixed(1);
+    }
+    if (typeof msg.uptime === 'number') {
+      state.uptime = msg.uptime;
+      $('#uptime').textContent = 'UP ' + hhmmss(msg.uptime);
+    }
+    if (typeof msg.clients === 'number') {
+      $('#clients').textContent = msg.clients;
+      $('#linkVal').textContent = msg.clients;
+    }
+    state.lastMetricsAt = Date.now();
+    state.synthCpu = state.cpu;
+    state.synthMem = state.mem;
+  }
+
+  function onKeystroke(msg) {
+    var text = String(msg.cmd || '');
+    $('#mirror').textContent = 'MIRROR: ' + (text.slice(-46) || '—');
+
+    var input = $('#cmdInput');
+    if (document.activeElement !== input) {
+      input.value = text;
+      input.classList.add('mirror');
+      setTimeout(function () { input.classList.remove('mirror'); }, 400);
+    }
+
+    if (msg.submit && text) addLine('phone', '手机执行 $ ' + text);
+  }
+
+  /* ---------------- 输入 ---------------- */
+  var inputEl = $('#cmdInput');
+  var inputTimer = null;
+
+  inputEl.addEventListener('input', function () {
+    if (inputTimer) clearTimeout(inputTimer);
+    inputTimer = setTimeout(function () {
+      send({ type: 'input', data: inputEl.value });
+    }, 90);
+  });
+
+  inputEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commit();
+    }
+  });
+
+  function commit() {
+    var v = inputEl.value.trim();
+    if (!v) return;
+    if (!state.connected) {
+      addLine('error', '链路未连接，无法下发指令');
+      return;
+    }
+    send({ type: 'command', data: v });
+    addLine('tablet', '$ ' + v);
+    inputEl.value = '';
+    send({ type: 'input', data: '' });
+  }
+
+  $('#btnSend').addEventListener('click', commit);
+  $('#btnClear').addEventListener('click', function () {
+    termEl.innerHTML = '';
+    addLine('sys', '本地终端已清屏');
+  });
+  $('#btnPause').addEventListener('click', function () {
+    state.autoscroll = !state.autoscroll;
+    this.textContent = '自动滚动 ' + (state.autoscroll ? 'ON' : 'OFF');
+  });
+  $('#btnFull').addEventListener('click', function () {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+    } else {
+      document.exitFullscreen && document.exitFullscreen();
+    }
+  });
+  $('#btnConnect').addEventListener('click', function () {
+    attempts = 0;
+    hideGate();
+    if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+    connect();
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && (!ws || ws.readyState > 1)) {
+      attempts = 0;
+      connect();
+    }
+  });
+
+  /* ---------------- 时钟 ---------------- */
+  setInterval(function () {
+    $('#clock').textContent = nowClock();
+  }, 1000);
+  $('#clock').textContent = nowClock();
+
+  /* ---------------- 启动 ---------------- */
+  renderPresets();
+  setLinked(false);
+  $('#btnSend').disabled = true;
+  addLine('sys', 'HOLO COMMAND v1.0 · 等待手机端广播…');
+
+  if (!autoUrl()) {
+    showGate();
+  } else {
+    connect();
+  }
+})();
+</script>
+</body>
+</html>
