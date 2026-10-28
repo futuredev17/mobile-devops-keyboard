@@ -1,125 +1,229 @@
-# 极客专属键盘 Demo（Flutter）
+# HOLO COMMAND · 全息赛博指挥中心
 
-极客运维控制台 · 第一阶段原型：**非系统级 IME**，纯 Flutter 自定义组件内嵌在 App 里。
+手机端（Flutter）= 控制器 + WebSocket 服务端；平板/电脑 = 浏览器打开即用的赛博大屏。
+平板**不需要装 App**，用浏览器访问 `http://手机IP:8848` 即可。
 
-已验证：`flutter analyze` 无问题，`flutter test` 10 项通过。
+```
+holo_command_center/
+├─ assets/holo_dashboard.html      # 平板端单文件大屏（HTML+CSS+JS）
+├─ lib/holo/console_server.dart    # WebSocket 服务端 + 状态广播 + 指令接收
+└─ lib/holo/holo_link.dart         # 手机端连接指示灯 / 二维码面板
+```
 
 ---
 
-## 一、先回答你最关心的三个技术问题
+## 1. 放进你的工程
 
-### 1. 怎么拦住系统软键盘？
+把文件按同名路径拷进现有项目：
 
-三种做法，结论是 **`readOnly: true`**：
-
-| 方案 | 效果 | 问题 |
-| --- | --- | --- |
-| `TextField(readOnly: true)` | Flutter 直接不建立 IME 连接，软键盘永不弹出 | 文本得自己改（这正是我们要的） |
-| `keyboardType: TextInputType.none` | 部分机型有效 | 平台差异大，不可靠 |
-| `TextInput.attach` + 自写 `TextInputClient` | 完全接管，连系统输入法回调都收不到 | 要自己实现光标、选区手柄、无障碍、放大镜…… 维护成本高 |
-
-本 Demo 用第一种。它天然带来「语言锁死」：**没有 IME 连接，就没有拼音候选，也不可能被切到中文**。
-
-解锁时把 `readOnly` 切回 `false`，Flutter 会重新连上系统输入法（变回普通输入框）。这就是 `EN · LOCKED` 开关的实质，逻辑在 `console_page.dart` 的 `_toggleLock()`。
-
-> 真正的**系统级**输入法（在任何 App 里都能用）Flutter 做不到，必须写 Android 原生 `InputMethodService`，再用 MethodChannel 与 Dart 通信。那是第二阶段的事。
-
-### 2. `RawKeyboardListener` 还能用吗？
-
-不能这么用了 —— 它在 Flutter 3.18 之后已废弃，`RawKeyEvent` 体系被 `HardwareKeyboard` 取代。现在的写法：
-
-```dart
-HardwareKeyboard.instance.addHandler((KeyEvent event) {
-  if (event is KeyUpEvent) return false;
-  event.logicalKey;   // LogicalKeyboardKey.arrowLeft ...
-  event.character;    // 已按 Shift 处理过的字符
-  return true;        // 吃掉这次按键
-});
+```
+你的项目/
+├─ assets/holo_dashboard.html
+└─ lib/holo/
+   ├─ console_server.dart
+   └─ holo_link.dart
 ```
 
-Demo 里接了这个，所以外接蓝牙键盘时也能像物理键盘一样编辑（`console_page.dart` 的 `_onHardwareKey`）。
-如果只想在某个子树里监听，用 `Focus(onKeyEvent: ...)` 或 `KeyboardListener`，但它们会抢焦点——自定义键盘场景下用全局 handler 更稳。
+`pubspec.yaml`：
 
-### 3. 怎么做到「像物理键盘」而不是拼字符串？
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  qr_flutter: ^4.1.0
 
-**所有按键都翻译成 `TextEditingValue` 的语义修改**，永远不写 `text += 'x'`。
+flutter:
+  assets:
+    - assets/holo_dashboard.html
+```
 
-核心是 `GeekEditingEngine`（`lib/geek/geek_editing_engine.dart`）：
+`flutter pub get`。
+
+### 平台配置
+
+**Android** — `AndroidManifest.xml` 里（`<application>` 外）确保有：
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+```
+
+**iOS** — `Info.plist` 加上（iOS 14+ 访问局域网需要授权弹窗）：
+
+```xml
+<key>NSLocalNetworkUsageDescription</key>
+<string>用于与同一 Wi-Fi 下的大屏终端建立协同连接</string>
+```
+
+**Windows / macOS** — 首次启动会被防火墙询问，放行即可；macOS 还需在
+`*.entitlements` 中允许 `com.apple.security.network.server`。
+
+> Flutter Web 无法跑 `dart:io` 服务端，本方案只针对手机/桌面 App。
+
+---
+
+## 2. 接入 console_page.dart
+
+### 2.1 生命周期与回调
 
 ```dart
-void backspace({bool byWord = false}) {
-  final r = _range;                       // 归一化选区
-  if (r.start != r.end) {                 // 有选区 → 删选区
-    _write(text.replaceRange(r.start, r.end, ''), r.start);
-    return;
+import 'holo/console_server.dart';
+import 'holo/holo_link.dart';
+
+class _ConsolePageState extends State<ConsolePage> {
+  final _holo = ConsoleServer.instance;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // 平板点预设 / 发 action
+    _holo.onAction = (action) {
+      if (action.action == 'preset.run') {
+        _runCommand(action.cmd);      // ← 换成你现有的执行方法
+      }
+    };
+
+    // 平板按回车发命令
+    _holo.onRemoteCommand = (cmd) {
+      _runCommand(cmd);
+    };
+
+    // 平板输入框敲字 → 镜像到手机输入框
+    _holo.onRemoteInput = (text) {
+      if (!mounted) return;
+      setState(() {
+        _inputController.value = TextEditingValue(
+          text: text,
+          selection: TextSelection.collapsed(offset: text.length),
+        );
+      });
+    };
   }
-  final from = byWord ? _wordLeft(text, r.start)   // Ctrl+退格整词删
-                      : _prevIndex(text, r.start); // 普通退格，含 emoji 代理对
-  _write(text.replaceRange(from, r.start, ''), from);
+
+  @override
+  void dispose() {
+    _holo.onAction = null;
+    _holo.onRemoteCommand = null;
+    _holo.onRemoteInput = null;
+    super.dispose();
+  }
 }
 ```
 
-`_write()` 一次性替换整个 `TextEditingValue`（文本 + 选区 + 光标），所以：
+### 2.2 在键盘上方插入状态条
 
-- 退格在**光标处**删，不是删末尾
-- 方向键移动光标，Shift+方向键扩选
-- Ctrl+← 按词跳转，Ctrl+Backspace 按词删
-- 上下键按「行 + 列」移动（跨行保持列位置）
-- Tab 在选区上整体缩进
-- 回车自动继承上一行缩进
-- 有自建 undo 栈（Ctrl+Z）
-
-键盘 Widget 只负责表达意图：
+在 `build` 里、键盘组件正上方加一行：
 
 ```dart
-enum GeekKeyAction { backspace, tab, enter, arrowLeft, shift, ctrl, sym, text, ... }
+Column(
+  children: [
+    Expanded(child: /* 原来的日志/终端区 */),
+    const HoloLinkBar(),          // ← 就这一行
+    /* 原来的极客键盘 */,
+  ],
+)
+```
+
+### 2.3 广播手机端的动作
+
+在你原来「按键 → 缓冲字符」的地方：
+
+```dart
+void _onKeyTap(String ch) {
+  _buffer += ch;
+  _holo.pushKeystroke(_buffer);          // 实时同步到平板
+  _holo.pushCursor(_buffer.length, text: _buffer);
+}
+
+void _onBackspace() {
+  if (_buffer.isNotEmpty) _buffer = _buffer.substring(0, _buffer.length - 1);
+  _holo.pushKeystroke(_buffer);
+}
+
+Future<void> _runCommand(String cmd) async {
+  _holo.pushLog('phone', r'$ ' + cmd);   // 平板终端立刻看到
+  // ...你原来的执行逻辑...
+  final output = await _executor.run(cmd);
+  _holo.pushOutput(cmd, output);          // 执行结果回传大屏
+}
+```
+
+### 2.4 手动启停（可选）
+
+状态条右侧开关已经能启停。若想在别处控制：
+
+```dart
+final error = await ConsoleServer.instance.start();  // null = 成功
+if (error != null) debugPrint(error);
+await ConsoleServer.instance.stop();
 ```
 
 ---
 
-## 二、目录结构
+## 3. 使用流程
 
+1. 手机打开 App → 点状态条右侧开关 → 服务启动。
+2. 自动弹出面板：显示 `http://192.168.x.x:8848` 和二维码。
+3. 平板连同一 Wi-Fi → 扫码或手动输入地址 → 大屏亮起。
+4. 手机敲键：平板左侧终端实时滚动，右上角图表跳动，延迟显示在 `LAT`。
+5. 平板点快捷指令 / 敲命令回车：手机执行，结果再广播回大屏。
+6. 状态条变绿灯 + `已连接 1 台大屏`。
+
+---
+
+## 4. 通信协议（想扩展时看这里）
+
+### 手机 → 平板（服务端广播）
+
+| type | 载荷 | 说明 |
+|---|---|---|
+| `hello` | `role`, `device`, `clients` | 握手 |
+| `presets` | `items[]` | 快捷指令列表 |
+| `log` | `level`, `text` | 终端日志 |
+| `keystroke` | `cmd`, `submit` | 手机键盘实时内容 |
+| `state` | `key`, `value` | 任意状态（光标等） |
+| `metrics` | `cpu`, `mem`, `net`, `clients`, `uptime` | 每秒一次 |
+| `clients` | `count` | 在线设备数 |
+| `pong` | `ts` | 延迟回环 |
+
+### 平板 → 手机（服务端接收）
+
+| type | 载荷 | 说明 |
+|---|---|---|
+| `input` | `data` | 输入框实时内容（90ms 节流） |
+| `command` | `data` | 回车下发的命令 |
+| `action` | `action`, `payload` | 预设按钮，如 `preset.run` |
+| `ping` | `ts` | 2.5s 心跳，用于测延迟 |
+
+预设的下发格式：
+
+```json
+{"type":"action","action":"preset.run",
+ "payload":{"id":"disk","name":"磁盘巡检","cmd":"df -h"}}
 ```
-lib/
-├── main.dart                          # MaterialApp + 深色主题
-├── console_page.dart                  # 页面壳：编辑器 / 停靠 / 悬浮窗 / FAB / 硬件键盘
-└── geek/
-    ├── geek_editing_engine.dart       ★ 按键 → TextEditingValue 的语义引擎
-    ├── geek_keys.dart                 ★ 仿 US ANSI 布局 + 符号页 + 命令宏
-    ├── geek_keyboard_panel.dart       ★ 键盘主体（2/3 键区 + 1/3 光标板）
-    ├── cursor_trackpad.dart           # 光标触摸区（拖动移动 / 扩选）
-    └── ui_bits.dart                   # KeyCap（支持长按连发）、MiniChip
-```
 
-## 三、功能对照表
+`ConsoleServer.presets` 里改这个列表，平板端会自动同步刷新。
 
-| 需求 | 实现 | 位置 |
-| --- | --- | --- |
-| 仿电脑布局 + 完整符号 | US ANSI 5 行，`?123` 符号页直出 `｜ ~ $ / \ { } [ ]` 等 | `geek_keys.dart` |
-| `$ / ~ / |` 高频符号直达 | 符号页第一行，不用按 Shift | `GeekLayouts.symRows` |
-| 强制横屏呼出 | 打开键盘 → `setPreferredOrientations(landscape)`；收起恢复 | `_setMode` |
-| 语言锁死 | `readOnly` + `EN · LOCKED` 开关 | `_toggleLock` |
-| Tab / Ctrl / Esc / ↑↓ | 底部功能键行 + Ctrl 组合（C/X/V/A/Z/K/U） | `bottomRow` / `_ctrlCombo` |
-| 长按连发 | 退格、方向键按住 400ms 后 55ms 一次 | `KeyCap` |
-| 显示 / 隐藏光标 | 顶部与光标板各一个按钮 | `showCursor` + `cursorWidth` |
-| 2/3 键区 + 1/3 光标触摸区 | `Expanded(flex: 2)` : `Expanded(flex: 1)` | `GeekKeyboardPanel` |
-| 触摸区移动光标 | 横拖逐字符、纵拖跨行、双击切「选择」扩选 | `CursorTrackpad` |
-| 悬浮窗一键切换 | 面板「变悬浮窗」/「停靠底部」，悬浮窗可拖动 | `_buildFloatingWindow` |
-| 悬浮球常驻 | 右侧圆形按钮，可拖动；点=开/关，长按=停靠/悬浮切换 | `_buildFab` |
+---
 
-## 四、运行
+## 5. 关于「延迟 < 50ms」
 
-```bash
-cd geek_console_demo
-flutter run          # 接 Android 设备或模拟器
-flutter test         # 引擎单元测试
-```
+局域网内 WebSocket 单程通常在 1–10ms，键盘动作是**逐键立即广播**（无节流）；
+只有平板输入框的镜像做了 90ms 节流，避免每敲一个字都刷屏——回车和执行结果不受影响。
+大屏右上角的 `LAT` 是 2.5 秒一次 ping 的实测 RTT，可以直接用来验收。
 
-横屏体验最好：手机横过来，键盘占下方 62%，左边 2/3 敲命令，右边 1/3 用大拇指搓光标。
+指标面板每秒推一次真实数据，两次推送之间由前端插值补帧，所以曲线看起来是连续流动的。
 
-## 五、下一步可接的地方
+---
 
-1. **SSH 终端**：`geek_editing_engine.dart` 里加一个 `onSubmit` 回调，回车时把整行命令交给 `dartssh2`，输出再回填到只读区域。方向键在远端 shell 里应发 `\x1b[A` 而不是移动本地光标——那时引擎可以加一个「raw 模式」，把按键编码成 ANSI 序列。
-2. **端云记忆**：命令历史 + 常用片段可以塞进符号页第四行（现在是写死的 `sudo` / `tail -f` 宏），改成动态数据源即可。
-3. **系统级 IME**：Android 原生 `InputMethodService` + MethodChannel，把这里的布局和引擎逻辑搬到原生层复用。注意系统 IME 无法强制横屏，只能做「键盘区域内的紧凑布局」。
-4. **多行选区手柄**：如果想要手机原生的选区拖柄，保留 `enableInteractiveSelection: true` 即可，已开启。
+## 6. 排查
+
+| 现象 | 处理 |
+|---|---|
+| 平板打不开页面 | 确认同一 Wi-Fi；关闭路由器「AP 隔离」；Windows 放行防火墙 |
+| 二维码扫了没反应 | 用平板相机扫，或直接在浏览器输入面板上的地址 |
+| 显示 `127.0.0.1` | 手机没连 Wi-Fi（只有蜂窝），先连局域网 |
+| 端口被占用 | `ConsoleServer.start(port: 8849)` 换端口 |
+| 图表在动但没日志 | 手机端没调 `pushKeystroke/pushLog`，或页面没连上（看红点） |
+| 杀进程后端口没释放 | `stop()` 已 `force: true`，正常退出即可 |
