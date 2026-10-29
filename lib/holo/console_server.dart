@@ -37,7 +37,7 @@ typedef HoloActionHandler = void Function(RemoteAction action);
 typedef HoloTextHandler = void Function(String text);
 
 /// 内置的局域网协同服务：
-/// 1. 在 8848 端口同时提供 HTTP 页面（平板打开即用）与 WebSocket 通道；
+/// 1. 在 8080 端口同时提供 HTTP 页面（平板打开即用）与 WebSocket 通道；
 /// 2. 把手机端的按键、日志、指标实时广播给所有平板；
 /// 3. 接收平板的指令并回调给 App。
 ///
@@ -49,7 +49,7 @@ class ConsoleServer {
   static final ConsoleServer instance = ConsoleServer._();
 
   /// 默认端口。
-  static const int defaultPort = 8848;
+  static const int defaultPort = 8080;
 
   /// 平板页面资源路径（需在 pubspec.yaml 中声明）。
   static const String dashboardAsset = 'assets/holo_dashboard.html';
@@ -109,7 +109,7 @@ class ConsoleServer {
   double _mem = 46;
   double _net = 0.4;
 
-  /// 平板应访问的完整地址，例如 `http://192.168.1.20:8848`。
+  /// 平板应访问的完整地址，例如 `http://192.168.1.20:8080`。
   String get url => 'http://${lanIp.value}:${port.value}';
 
   int get _now => DateTime.now().millisecondsSinceEpoch;
