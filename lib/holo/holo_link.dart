@@ -319,7 +319,7 @@ class HoloLinkSheet extends StatelessWidget {
                     const SizedBox(height: 12),
                     const Text(
                       '提示：平板打不开时，先确认两者在同一网段；'
-                          'Windows / macOS 首次启动可能被防火墙拦截，请放行 8848 端口。',
+                          'Windows / macOS 首次启动可能被防火墙拦截，请放行 8080 端口。',
                       style: TextStyle(
                         fontSize: 10,
                         height: 1.7,
